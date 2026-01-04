@@ -13,7 +13,7 @@ if (platform === "Linux" || platform.match(/BSD$/)) {
   platformNotifier = new NotifySend({ withFallback: false })
 } else if (platform === "Darwin") {
   const { NotificationCenter } = notifier
-  platformNotifier = new NotificationCenter({ withFallback: false })
+  platformNotifier = new NotificationCenter({ withFallback: true })
 } else if (platform === "Windows_NT") {
   const { WindowsToaster } = notifier
   platformNotifier = new WindowsToaster({ withFallback: false })
