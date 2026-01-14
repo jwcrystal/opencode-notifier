@@ -13,6 +13,7 @@ export interface NotifierConfig {
   sound: boolean
   notification: boolean
   timeout: number
+  showProjectName: boolean
   events: {
     permission: EventConfig
     complete: EventConfig
@@ -42,6 +43,7 @@ const DEFAULT_CONFIG: NotifierConfig = {
   sound: true,
   notification: true,
   timeout: 5,
+  showProjectName: true,
   events: {
     permission: { ...DEFAULT_EVENT_CONFIG },
     complete: { ...DEFAULT_EVENT_CONFIG },
@@ -49,10 +51,10 @@ const DEFAULT_CONFIG: NotifierConfig = {
     question: { ...DEFAULT_EVENT_CONFIG },
   },
   messages: {
-    permission: "OpenCode needs permission",
-    complete: "OpenCode has finished",
-    error: "OpenCode encountered an error",
-    question: "OpenCode has a question",
+    permission: "Session needs permission",
+    complete: "Session has finished",
+    error: "Session encountered an error",
+    question: "Session has a question",
   },
   sounds: {
     permission: null,
@@ -113,11 +115,12 @@ export function loadConfig(): NotifierConfig {
         typeof userConfig.timeout === "number" && userConfig.timeout > 0
           ? userConfig.timeout
           : DEFAULT_CONFIG.timeout,
+      showProjectName: userConfig.showProjectName ?? DEFAULT_CONFIG.showProjectName,
       events: {
         permission: parseEventConfig(userConfig.events?.permission ?? userConfig.permission, defaultWithGlobal),
         complete: parseEventConfig(userConfig.events?.complete ?? userConfig.complete, defaultWithGlobal),
         error: parseEventConfig(userConfig.events?.error ?? userConfig.error, defaultWithGlobal),
-        question: parseEventConfig(userConfig.events?.question, defaultWithGlobal),
+        question: parseEventConfig(userConfig.events?.question ?? userConfig.question, defaultWithGlobal),
       },
       messages: {
         permission: userConfig.messages?.permission ?? DEFAULT_CONFIG.messages.permission,

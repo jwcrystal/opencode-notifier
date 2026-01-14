@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.13] - 2026-01-14
+
+### Added
+- Show project folder name in notification title (closes #12)
+- New config option `showProjectName` (default: true)
+
+### Changed
+- Default messages now use "Session" prefix instead of "OpenCode" to avoid repetition
+
+### Fixed
+- Config parsing for `question` event now supports top-level format
+
 ## [0.1.12] - 2026-01-14
 
 ### Added

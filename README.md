@@ -91,6 +91,7 @@ To customize the plugin, create `~/.config/opencode/opencode-notifier.json`:
   "sound": true,
   "notification": true,
   "timeout": 5,
+  "showProjectName": true,
   "events": {
     "permission": { "sound": true, "notification": true },
     "complete": { "sound": true, "notification": true },
@@ -98,10 +99,10 @@ To customize the plugin, create `~/.config/opencode/opencode-notifier.json`:
     "question": { "sound": true, "notification": true }
   },
   "messages": {
-    "permission": "OpenCode needs permission",
-    "complete": "OpenCode has finished",
-    "error": "OpenCode encountered an error",
-    "question": "OpenCode has a question"
+    "permission": "Session needs permission",
+    "complete": "Session has finished",
+    "error": "Session encountered an error",
+    "question": "Session has a question"
   },
   "sounds": {
     "permission": "/path/to/custom/sound.wav",
@@ -119,6 +120,7 @@ To customize the plugin, create `~/.config/opencode/opencode-notifier.json`:
 | `sound` | boolean | `true` | Global toggle for all sounds |
 | `notification` | boolean | `true` | Global toggle for all notifications |
 | `timeout` | number | `5` | Notification duration in seconds (Linux only) |
+| `showProjectName` | boolean | `true` | Show project folder name in notification title |
 
 ### Events
 

@@ -2,7 +2,6 @@ import os from "os"
 import { exec } from "child_process"
 import notifier from "node-notifier"
 
-const NOTIFICATION_TITLE = "OpenCode"
 const DEBOUNCE_MS = 1000
 
 const platform = os.type()
@@ -22,6 +21,7 @@ if (platform === "Linux" || platform.match(/BSD$/)) {
 const lastNotificationTime: Record<string, number> = {}
 
 export async function sendNotification(
+  title: string,
   message: string,
   timeout: number
 ): Promise<void> {
@@ -34,7 +34,7 @@ export async function sendNotification(
   if (platform === "Darwin") {
     return new Promise((resolve) => {
       const escapedMessage = message.replace(/"/g, '\\"')
-      const escapedTitle = NOTIFICATION_TITLE.replace(/"/g, '\\"')
+      const escapedTitle = title.replace(/"/g, '\\"')
       exec(
         `osascript -e 'display notification "${escapedMessage}" with title "${escapedTitle}"'`,
         () => {
@@ -46,7 +46,7 @@ export async function sendNotification(
 
   return new Promise((resolve) => {
     const notificationOptions: any = {
-      title: NOTIFICATION_TITLE,
+      title: title,
       message: message,
       timeout: timeout,
       icon: undefined,
