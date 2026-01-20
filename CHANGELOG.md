@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Custom command execution for events with `{event}` and `{message}` token substitution
+- `command.minDuration` option to skip command if response time is below threshold
+- New `subagent_complete` event for subagent session completions (disabled by default)
+
+### Changed
+- `complete` event now only fires for main (primary) sessions
+- Elapsed time for `minDuration` now measures time since last user prompt
+
 ## [0.1.13] - 2026-01-14
 
 ### Added
