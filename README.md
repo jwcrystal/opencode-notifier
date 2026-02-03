@@ -92,6 +92,7 @@ To customize the plugin, create `~/.config/opencode/opencode-notifier.json`:
   "notification": true,
   "timeout": 5,
   "showProjectName": true,
+  "suppressWhenFocused": false,
   "command": {
     "enabled": false,
     "path": "/path/to/command",
@@ -130,6 +131,7 @@ To customize the plugin, create `~/.config/opencode/opencode-notifier.json`:
 | `notification` | boolean | `true` | Global toggle for all notifications |
 | `timeout` | number | `5` | Notification duration in seconds (Linux only) |
 | `showProjectName` | boolean | `true` | Show project folder name in notification title |
+| `suppressWhenFocused` | boolean | `false` | Suppress notifications when terminal is focused |
 | `command` | object | — | Command execution settings (enabled/path/args/minDuration) |
 
 ### Events
@@ -163,6 +165,14 @@ Or use a boolean to toggle both:
 ```
 
 Note: `complete` fires for primary (main) session completion, while `subagent_complete` fires for subagent completion. `subagent_complete` defaults to disabled (both sound and notification are false).
+
+### Suppress when focused
+
+When `suppressWhenFocused` is enabled, notifications are skipped if your terminal is the frontmost window.
+
+- macOS: works out of the box
+- Windows: uses PowerShell to detect the foreground app
+- Linux: focus suppression is disabled (Wayland/X11 focus detection is unreliable)
 
 ### Messages
 

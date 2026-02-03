@@ -2,9 +2,26 @@ import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { basename } from "path"
 import { loadConfig, isEventSoundEnabled, isEventNotificationEnabled, getMessage, getSoundPath } from "./config"
 import type { EventType, NotifierConfig } from "./config"
+import detectTerminal from "detect-terminal"
+import { execFile } from "child_process"
 import { sendNotification } from "./notify"
 import { playSound } from "./sound"
 import { runCommand } from "./command"
+
+const TERMINAL_PROCESS_NAMES: Record<string, string> = {
+  ghostty: "Ghostty",
+  kitty: "kitty",
+  iterm: "iTerm2",
+  iterm2: "iTerm2",
+  wezterm: "WezTerm",
+  alacritty: "Alacritty",
+  terminal: "Terminal",
+  apple_terminal: "Terminal",
+  hyper: "Hyper",
+  warp: "Warp",
+  vscode: "Code",
+  "vscode-insiders": "Code - Insiders",
+}
 
 function getNotificationTitle(config: NotifierConfig, projectName: string | null): string {
   if (config.showProjectName && projectName) {
@@ -24,6 +41,12 @@ async function handleEvent(
   const message = getMessage(config, eventType)
 
   if (isEventNotificationEnabled(config, eventType)) {
+    if (config.suppressWhenFocused) {
+      const shouldSuppress = await isTerminalFocused()
+      if (shouldSuppress) {
+        return
+      }
+    }
     const title = getNotificationTitle(config, projectName)
     promises.push(sendNotification(title, message, config.timeout))
   }
@@ -47,6 +70,88 @@ async function handleEvent(
   }
 
   await Promise.allSettled(promises)
+}
+
+async function runExecCommand(command: string, args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(command, args, (error, stdout) => {
+      if (error) {
+        resolve(null)
+        return
+      }
+      resolve(stdout.trim())
+    })
+  })
+}
+
+async function runOsascript(script: string): Promise<string | null> {
+  if (process.platform !== "darwin") return null
+  return runExecCommand("osascript", ["-e", script])
+}
+
+async function getFrontmostAppMac(): Promise<string | null> {
+  return runOsascript(
+    'tell application "System Events" to get name of first application process whose frontmost is true'
+  )
+}
+
+async function getFrontmostProcessWindows(): Promise<string | null> {
+  if (process.platform !== "win32") return null
+
+  const script = [
+    "Add-Type @\"",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public class Win32 {",
+    "  [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();",
+    "  [DllImport(\"user32.dll\")] public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int processId);",
+    "}",
+    "\"@",
+    "$hwnd = [Win32]::GetForegroundWindow()",
+    "$pid = 0",
+    "[Win32]::GetWindowThreadProcessId($hwnd, [ref]$pid) | Out-Null",
+    "(Get-Process -Id $pid).ProcessName",
+  ].join("\n")
+
+  return runExecCommand("powershell", ["-NoProfile", "-Command", script])
+}
+
+function getTerminalProcessName(terminalName: string): string {
+  return TERMINAL_PROCESS_NAMES[terminalName.toLowerCase()] ?? terminalName
+}
+
+function normalizeAppName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function matchesTerminal(frontmost: string, terminal: string): boolean {
+  const frontNormalized = normalizeAppName(frontmost)
+  const terminalNormalized = normalizeAppName(terminal)
+
+  if (!frontNormalized || !terminalNormalized) return false
+  return frontNormalized.includes(terminalNormalized) || terminalNormalized.includes(frontNormalized)
+}
+
+async function isTerminalFocused(): Promise<boolean> {
+  const terminalName = detectTerminal({ preferOuter: true })
+  if (!terminalName) return false
+
+  if (process.platform === "darwin") {
+    const frontmost = await getFrontmostAppMac()
+    const processName = getTerminalProcessName(terminalName)
+    return frontmost ? frontmost.toLowerCase() === processName.toLowerCase() : false
+  }
+
+  if (process.platform === "win32") {
+    const frontmostProcess = await getFrontmostProcessWindows()
+    return frontmostProcess ? matchesTerminal(frontmostProcess, terminalName) : false
+  }
+
+  if (process.platform === "linux") {
+    return false
+  }
+
+  return false
 }
 
 function getSessionIDFromEvent(event: unknown): string | null {

@@ -21,6 +21,7 @@ export interface NotifierConfig {
   notification: boolean
   timeout: number
   showProjectName: boolean
+  suppressWhenFocused: boolean
   command: CommandConfig
   events: {
     permission: EventConfig
@@ -55,6 +56,7 @@ const DEFAULT_CONFIG: NotifierConfig = {
   notification: true,
   timeout: 5,
   showProjectName: true,
+  suppressWhenFocused: false,
   command: {
     enabled: false,
     path: "",
@@ -147,6 +149,10 @@ export function loadConfig(): NotifierConfig {
           ? userConfig.timeout
           : DEFAULT_CONFIG.timeout,
       showProjectName: userConfig.showProjectName ?? DEFAULT_CONFIG.showProjectName,
+      suppressWhenFocused:
+        typeof userConfig.suppressWhenFocused === "boolean"
+          ? userConfig.suppressWhenFocused
+          : DEFAULT_CONFIG.suppressWhenFocused,
       command: {
         enabled: typeof userCommand.enabled === "boolean" ? userCommand.enabled : DEFAULT_CONFIG.command.enabled,
         path: typeof userCommand.path === "string" ? userCommand.path : DEFAULT_CONFIG.command.path,

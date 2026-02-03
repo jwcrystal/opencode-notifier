@@ -1,6 +1,6 @@
 {
   "name": "@mohak34/opencode-notifier",
-  "version": "0.1.15",
+  "version": "0.1.17",
   "description": "OpenCode plugin that sends system notifications and plays sounds when permission is needed, generation completes, or errors occur",
   "author": "mohak34",
   "license": "MIT",
@@ -32,6 +32,7 @@
     "alerts"
   ],
   "dependencies": {
+    "detect-terminal": "^2.0.0",
     "node-notifier": "^10.0.1"
   },
   "devDependencies": {
