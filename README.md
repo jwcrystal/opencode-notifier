@@ -2,9 +2,9 @@
 
 OpenCode plugin that plays sounds and sends system notifications when permission is needed, generation completes, errors occur, or the question tool is invoked. Works on macOS, Linux, and Windows.
 
-## Installation
+## Quick Start
 
-Add the plugin to your `opencode.json` or `opencode.jsonc`:
+Add this to your `opencode.json`:
 
 ```json
 {
@@ -12,99 +12,39 @@ Add the plugin to your `opencode.json` or `opencode.jsonc`:
 }
 ```
 
-Using `@latest` ensures you always get the newest version when the cache is refreshed.
+Restart OpenCode. Done.
 
-To pin a specific version:
+## What it does
 
-```json
-{
-  "plugin": ["@mohak34/opencode-notifier@0.1.14"]
-}
-```
+You'll get notified when:
+- OpenCode needs permission to run something
+- Your session finishes
+- An error happens  
+- The question tool pops up
 
-Restart OpenCode. The plugin will be automatically installed and loaded.
+There's also `subagent_complete` for when subagents finish, but that's silent by default so you don't get spammed.
 
-## Updating
+## Setup by platform
 
-OpenCode caches plugins in `~/.cache/opencode`. Plugins are not auto-updated; you need to clear the cache to get new versions.
+**macOS**: Nothing to do, works out of the box. Shows the Script Editor icon.
 
-### If you use `@latest`
-
-Clear the cache and restart OpenCode:
-
-**Linux/macOS:**
+**Linux**: Should work if you already have a notification system setup. If not install libnotify:
 
 ```bash
-rm -rf ~/.cache/opencode/node_modules/@mohak34/opencode-notifier
+sudo apt install libnotify-bin  # Ubuntu/Debian
+sudo dnf install libnotify       # Fedora  
+sudo pacman -S libnotify         # Arch
 ```
 
-**Windows (PowerShell):**
+For sounds, you need one of: `paplay`, `aplay`, `mpv`, or `ffplay`
 
-```powershell
-Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\opencode\node_modules\@mohak34\opencode-notifier"
-```
+**Windows**: Works out of the box. But heads up:
+- Only `.wav` files work (not mp3)
+- Use full paths like `C:/Users/You/sounds/alert.wav` not `~/`
 
-Then restart OpenCode - it will download the latest version automatically.
+## Config file
 
-### If you use a pinned version (e.g., `@0.1.14`)
-
-1. Update the version in your `opencode.json`:
-
-   ```json
-   {
-     "plugin": ["@mohak34/opencode-notifier@0.1.14"]
-   }
-   ```
-
-2. Clear the cache (see commands above)
-
-3. Restart OpenCode
-
-### Check installed version
-
-**Linux/macOS:**
-
-```bash
-cat ~/.cache/opencode/node_modules/@mohak34/opencode-notifier/package.json | grep version
-```
-
-**Windows (PowerShell):**
-
-```powershell
-Get-Content "$env:USERPROFILE\.cache\opencode\node_modules\@mohak34\opencode-notifier\package.json" | Select-String "version"
-```
-
-## Platform Notes
-
-The plugin works out of the box on all platforms. For best results:
-
-- **macOS**: No additional setup required. Notifications display the Script Editor icon (custom icons not supported with osascript for reliability)
-- **Windows**: No additional setup required. The OpenCode icon displays in notifications
-- **Linux**: For sounds, one of these should be installed: `paplay`, `aplay`, `mpv`, or `ffplay`. For notifications, `notify-send` is recommended. The OpenCode icon displays in notifications
-
-**Note**: To disable icons, set `showIcon: false` in your configuration.
-
-### macOS: Choosing Your Notification System
-
-On macOS, you can choose between two notification backends:
-
-- **`osascript`** (default): Most reliable method that always works. Uses AppleScript to display notifications. **Limitation**: Cannot display custom icons (shows Script Editor icon instead).
-
-- **`node-notifier`**: Supports custom icons but some users experience reliability issues where notifications don't appear.
-
-To use `node-notifier` with custom icons:
-
-```json
-{
-  "notificationSystem": "node-notifier"
-}
-```
-
-If you experience missing notifications with `node-notifier`, switch back to `osascript` (or remove the option to use the default).
-
-## Configuration
-
-To customize the plugin, create `~/.config/opencode/opencode-notifier.json`:
+Create `~/.config/opencode/opencode-notifier.json` with the defaults:
 
 ```json
 {
@@ -135,204 +75,240 @@ To customize the plugin, create `~/.config/opencode/opencode-notifier.json`:
     "question": "Session has a question"
   },
   "sounds": {
-    "permission": "/path/to/custom/sound.wav",
-    "complete": "/path/to/custom/sound.wav",
-    "subagent_complete": "/path/to/custom/sound.wav",
-    "error": "/path/to/custom/sound.wav",
-    "question": "/path/to/custom/sound.wav"
+    "permission": null,
+    "complete": null,
+    "subagent_complete": null,
+    "error": null,
+    "question": null
   }
 }
 ```
 
-### Options
+## All options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `sound` | boolean | `true` | Global toggle for all sounds |
-| `notification` | boolean | `true` | Global toggle for all notifications |
-| `timeout` | number | `5` | Notification duration in seconds (Linux only) |
-| `showProjectName` | boolean | `true` | Show project folder name in notification title |
-| `showIcon` | boolean | `true` | Show OpenCode icon in notifications |
-| `notificationSystem` | string | `"osascript"` | macOS only: `"osascript"` (reliable, no icons) or `"node-notifier"` (icons, may have issues) |
-| `command` | object | — | Command execution settings (enabled/path/args/minDuration) |
+### Global options
+
+```json
+{
+  "sound": true,
+  "notification": true,
+  "timeout": 5,
+  "showProjectName": true,
+  "showIcon": true,
+  "notificationSystem": "osascript"
+}
+```
+
+- `sound` - Turn sounds on/off (default: true)
+- `notification` - Turn notifications on/off (default: true)
+- `timeout` - How long notifications show in seconds, Linux only (default: 5)
+- `showProjectName` - Show folder name in notification title (default: true)
+- `showIcon` - Show OpenCode icon, Windows/Linux only (default: true)
+- `notificationSystem` - macOS only: `"osascript"` or `"node-notifier"` (default: "osascript")
 
 ### Events
 
-Control sound and notification separately for each event:
+Control each event separately:
 
 ```json
 {
   "events": {
     "permission": { "sound": true, "notification": true },
-    "complete": { "sound": false, "notification": true },
-    "subagent_complete": { "sound": true, "notification": false },
-    "error": { "sound": true, "notification": false },
+    "complete": { "sound": true, "notification": true },
+    "subagent_complete": { "sound": false, "notification": false },
+    "error": { "sound": true, "notification": true },
     "question": { "sound": true, "notification": true }
   }
 }
 ```
 
-Or use a boolean to toggle both:
+Or use true/false for both:
 
 ```json
 {
   "events": {
-    "permission": true,
-    "complete": false,
-    "subagent_complete": true,
-    "error": true,
-    "question": true
+    "complete": false
   }
 }
 ```
 
-Note: `complete` fires for primary (main) session completion, while `subagent_complete` fires for subagent completion. `subagent_complete` defaults to disabled (both sound and notification are false).
-
 ### Messages
 
-Customize notification text:
+Customize the notification text:
 
 ```json
 {
   "messages": {
-    "permission": "Action required",
-    "complete": "Done!",
-    "subagent_complete": "Subagent finished",
-    "error": "Something went wrong",
-    "question": "Input needed"
+    "permission": "Session needs permission",
+    "complete": "Session has finished",
+    "subagent_complete": "Subagent task completed",
+    "error": "Session encountered an error",
+    "question": "Session has a question"
   }
 }
 ```
 
-### Command
-
-Run a custom command when events fire. Use `{event}` and `{message}` tokens in `path` or `args` to inject the event name and message.
-
-`command.minDuration` (optional, seconds) gates command execution based on the time elapsed since the last user prompt.
-- Applies to all events for the custom command.
-- If elapsed time is known and is below `minDuration`, the command is skipped.
-- If elapsed time cannot be determined for an event, the command still runs.
-
-```json
-{
-  "command": {
-    "enabled": true,
-    "path": "/path/to/command",
-    "args": ["--event", "{event}", "--message", "{message}"],
-    "minDuration": 10
-  }
-}
-```
-
-### Custom Sounds
+### Sounds
 
 Use your own sound files:
 
 ```json
 {
   "sounds": {
-    "permission": "/home/user/sounds/alert.wav",
-    "complete": "/home/user/sounds/done.wav",
-    "subagent_complete": "/home/user/sounds/subagent-done.wav",
-    "error": "/home/user/sounds/error.wav",
-    "question": "/home/user/sounds/question.wav"
+    "permission": "/path/to/alert.wav",
+    "complete": "/path/to/done.wav",
+    "subagent_complete": "/path/to/subagent-done.wav",
+    "error": "/path/to/error.wav",
+    "question": "/path/to/question.wav"
   }
 }
 ```
 
-If a custom sound file path is provided but the file doesn't exist, the plugin will fall back to the bundled sound.
+Platform notes:
+- macOS/Linux: .wav or .mp3 files work
+- Windows: Only .wav files work
+- If file doesn't exist, falls back to bundled sound
 
-### Example: Different behaviors for main and subagent completion
+### Custom commands
 
-You may want different notification behaviors for primary sessions versus subagent sessions. For example:
-
-- **Main session completion**: Play a sound and show a system notification
-- **Subagent completion**: Play a different sound, but no system notification
+Run your own script when something happens. Use `{event}` and `{message}` as placeholders:
 
 ```json
 {
-  "events": {
-    "complete": { "sound": true, "notification": true },
-    "subagent_complete": { "sound": true, "notification": false }
-  },
-  "messages": {
-    "complete": "Session has finished",
-    "subagent_complete": "Subagent task completed"
-  },
-  "sounds": {
-    "complete": "/home/user/sounds/main-done.wav",
-    "subagent_complete": "/home/user/sounds/subagent-chime.wav"
+  "command": {
+    "enabled": true,
+    "path": "/path/to/your/script",
+    "args": ["{event}", "{message}"],
+    "minDuration": 10
   }
 }
 ```
 
-## Troubleshooting
+- `enabled` - Turn command on/off
+- `path` - Path to your script/executable
+- `args` - Arguments to pass, can use `{event}` and `{message}` tokens
+- `minDuration` - Skip if response was quick, avoids spam (seconds)
 
-### macOS: Notifications not showing (only sound works)
+#### Example: Log events to a file
 
-**Update to v0.1.10 or later** - this version includes a fix for macOS notification events.
-
-If notifications still don't work after updating:
-
-1. **Check notification permissions:**
-   - Open **System Settings > Notifications**
-   - Find **Script Editor** in the list
-   - Make sure notifications are set to **Banners** or **Alerts**
-
-### Linux: Notifications not showing
-
-1. **Install notify-send:**
-
-   ```bash
-   # Debian/Ubuntu
-   sudo apt install libnotify-bin
-
-   # Fedora
-   sudo dnf install libnotify
-
-   # Arch
-   sudo pacman -S libnotify
-   ```
-
-2. **Test if it works:**
-
-   ```bash
-   notify-send "Test" "Hello"
-   ```
-
-### Linux: Sounds not playing
-
-Install one of these audio players: `paplay`, `aplay`, `mpv`, or `ffplay`.
-
-```bash
-# Debian/Ubuntu (PulseAudio)
-sudo apt install pulseaudio-utils
-
-# Or install mpv
-sudo apt install mpv
+```json
+{
+  "command": {
+    "enabled": true,
+    "path": "/bin/bash",
+    "args": [
+      "-c",
+      "echo '[{event}] {message}' >> /tmp/opencode.log"
+    ]
+  }
+}
 ```
 
-### Windows: Notifications not showing
+## macOS: Pick your notification style
 
-1. Open **Settings > System > Notifications**
-2. Make sure notifications are enabled
-3. Check that your terminal app has notification permissions
+**osascript** (default): Reliable but shows Script Editor icon
 
-### General: Plugin not loading
+```json
+{ 
+  "notificationSystem": "osascript" 
+}
+```
 
-1. **Check your opencode.json syntax:**
+**node-notifier**: Shows OpenCode icon but might miss notifications sometimes
 
-   ```json
-   {
-     "plugin": ["@mohak34/opencode-notifier@latest"]
-   }
-   ```
+```json
+{ 
+  "notificationSystem": "node-notifier" 
+}
+```
 
-2. **Clear the cache and restart:**
+**NOTE:** If you go with node-notifier and start missing notifications, just switch back or remove the option from the config. Users have reported issues with using node-notifier for receiving only sounds and no notification popups.
 
-   ```bash
-   rm -rf ~/.cache/opencode/node_modules/@mohak34/opencode-notifier
-   ```
+## Updating
+
+If Opencode does not update the plugin or there is an issue with the cache version:
+
+```bash
+# Linux/macOS
+rm -rf ~/.cache/opencode/node_modules/@mohak34/opencode-notifier
+
+# Windows
+Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\opencode\node_modules\@mohak34\opencode-notifier"
+```
+
+Then restart OpenCode.
+
+## Troubleshooting
+
+**macOS: Not seeing notifications?**
+Go to System Settings > Notifications > Script Editor, make sure it's set to Banners or Alerts.
+
+**macOS: node-notifier not showing notifications?**
+Switch back to osascript. Some users report node-notifier works for sounds but not visual notifications on certain macOS versions.
+
+**Linux: No notifications?**
+Install libnotify-bin:
+```bash
+sudo apt install libnotify-bin  # Debian/Ubuntu
+sudo dnf install libnotify       # Fedora
+sudo pacman -S libnotify         # Arch
+```
+
+Test with: `notify-send "Test" "Hello"`
+
+**Linux: No sounds?**
+Install one of: `paplay`, `aplay`, `mpv`, or `ffplay`
+
+**Windows: Custom sounds not working?**
+- Must be .wav format (not .mp3)
+- Use full Windows paths: `C:/Users/YourName/sounds/alert.wav` (not `~/`)
+- Make sure the file actually plays in Windows Media Player
+- If using WSL, the path should be accessible from Windows
+
+**Windows WSL notifications not working?**
+WSL doesn't have a native notification daemon. Use PowerShell commands instead:
+
+```json
+{
+  "notification": false,
+  "sound": true,
+  "command": {
+    "enabled": true,
+    "path": "powershell.exe",
+    "args": [
+      "-Command",
+      "$wshell = New-Object -ComObject Wscript.Shell; $wshell.Popup('{message}', 5, 'OpenCode - {event}', 0+64)"
+    ]
+  }
+}
+```
+
+**Windows: OpenCode crashes when notifications appear?**
+This is a known Bun issue on Windows. Disable native notifications and use PowerShell popups:
+
+```json
+{
+  "notification": false,
+  "sound": true,
+  "command": {
+    "enabled": true,
+    "path": "powershell.exe",
+    "args": [
+      "-Command",
+      "$wshell = New-Object -ComObject Wscript.Shell; $wshell.Popup('{message}', 5, 'OpenCode - {event}', 0+64)"
+    ]
+  }
+}
+```
+
+**Plugin not loading?**
+- Check your opencode.json syntax
+- Clear the cache (see Updating section)
+- Restart OpenCode
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md)
 
 ## License
 
