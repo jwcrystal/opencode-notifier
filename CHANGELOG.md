@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.21] - 2026-02-18
+
+### Added
+- Session title in notification messages (#28) - @cristianmiranda
+- New `showSessionTitle` config option (default: false)
+- New `{sessionTitle}` placeholder for notification messages
+- New `{projectName}` token support in custom command args
+- Session title pre-loading for better performance on error events
+
+### Notes
+- Session titles are disabled by default to avoid large notification text
+
 ## [0.1.20] - 2026-02-18
 
 ### Added
