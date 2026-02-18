@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.23] - 2026-02-19
+
+### Added
+- `sound-toggle` custom tool - Enable, disable, toggle, or check sound status directly from OpenCode
+- Use natural language: "Use sound-toggle to disable sounds" or "Use sound-toggle to check status"
+- Config file path can be overridden via `OPENCODE_NOTIFIER_CONFIG_PATH` environment variable for testing
+
+### Fixed
+- Preserve all config fields when saving (no loss of sounds/volumes/showSessionTitle)
+- Sound toggle now takes effect immediately (config reloaded per event/tool)
+
 ## [0.1.22] - 2026-02-18
 
 ### Added
@@ -9,7 +20,7 @@ All notable changes to this project will be documented in this file.
 - Shows "Session was interrupted" instead of duplicate error+completion notifications
 - Only one sound plays when interruption is detected
 - Auto-cleanup of error tracking to prevent memory leaks
- - Fix placeholder interpolation so `{sessionTitle}` is removed when disabled
+- Fix placeholder interpolation so `{sessionTitle}` is removed when disabled
 
 ### Changed
 - Restored PR #29's 350ms delay and 4-map tracking for reliable race handling
@@ -35,17 +46,6 @@ All notable changes to this project will be documented in this file.
 - Supported on macOS and Linux (Windows plays at full volume)
 - Volume values are automatically clamped to valid range (0-1)
 - Default volume is 100% (1.0) for all events when not specified
-
-## [0.1.23] - 2026-02-19
-
-### Added
-- `sound-toggle` custom tool - Enable, disable, toggle, or check sound status directly from OpenCode
-- Use natural language: "Use sound-toggle to disable sounds" or "Use sound-toggle to check status"
-- Config file path can be overridden via `OPENCODE_NOTIFIER_CONFIG_PATH` environment variable for testing
-
-### Fixed
-- Preserve all config fields when saving (no loss of sounds/volumes/showSessionTitle)
-- Sound toggle now takes effect immediately (config reloaded per event/tool)
 
 ## [0.1.19] - 2026-02-12
 
