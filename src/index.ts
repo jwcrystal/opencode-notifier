@@ -179,6 +179,9 @@ export const NotifierPlugin: Plugin = async ({ client, directory }) => {
       if (event.type === "session.idle") {
         const sessionID = getSessionIDFromEvent(event)
         if (sessionID) {
+          // Wait 100ms to allow error event to be recorded first (handles race condition)
+          await new Promise(resolve => setTimeout(resolve, 100))
+
           // Check if error happened recently (within 500ms) - indicates Esc was pressed
           const errorTime = recentErrors.get(sessionID)
           if (errorTime && Date.now() - errorTime < 500) {
