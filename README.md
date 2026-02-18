@@ -24,29 +24,6 @@ You'll get notified when:
 
 There's also `subagent_complete` for when subagents finish, but that's silent by default so you don't get spammed.
 
-## Sound Toggle Tool
-
-You can use the `sound-toggle` tool to enable, disable, or check the status of sounds without editing the config file:
-
-```json
-{
-  "plugin": ["@mohak34/opencode-notifier@latest"]
-}
-```
-
-Then in OpenCode, just ask:
-
-- "Use sound-toggle to disable sounds" - Turns sounds off
-- "Use sound-toggle to enable sounds" - Turns sounds on  
-- "Use sound-toggle to toggle sounds" - Switches between on/off
-- "Use sound-toggle to check status" - Shows current sound status
-
-The tool will respond with the current state and modify your `opencode-notifier.json` config file accordingly.
-
-Notes:
-- The config file must exist (run the notifier once to create it) before using `sound-toggle`.
-- You can override the config path with `OPENCODE_NOTIFIER_CONFIG_PATH`.
-
 ## Setup by platform
 
 **macOS**: Nothing to do, works out of the box. Shows the Script Editor icon.
