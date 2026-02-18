@@ -43,6 +43,10 @@ Then in OpenCode, just ask:
 
 The tool will respond with the current state and modify your `opencode-notifier.json` config file accordingly.
 
+Notes:
+- The config file must exist (run the notifier once to create it) before using `sound-toggle`.
+- You can override the config path with `OPENCODE_NOTIFIER_CONFIG_PATH`.
+
 ## Setup by platform
 
 **macOS**: Nothing to do, works out of the box. Shows the Script Editor icon.
@@ -71,6 +75,7 @@ Create `~/.config/opencode/opencode-notifier.json` with the defaults:
   "notification": true,
   "timeout": 5,
   "showProjectName": true,
+  "showSessionTitle": false,
   "showIcon": true,
   "notificationSystem": "osascript",
   "command": {
@@ -87,11 +92,11 @@ Create `~/.config/opencode/opencode-notifier.json` with the defaults:
     "question": { "sound": true, "notification": true }
   },
   "messages": {
-    "permission": "Session needs permission",
-    "complete": "Session has finished",
-    "subagent_complete": "Subagent task completed",
-    "error": "Session encountered an error",
-    "question": "Session has a question"
+    "permission": "Session needs permission: {sessionTitle}",
+    "complete": "Session has finished: {sessionTitle}",
+    "subagent_complete": "Subagent task completed: {sessionTitle}",
+    "error": "Session encountered an error: {sessionTitle}",
+    "question": "Session has a question: {sessionTitle}"
   },
   "sounds": {
     "permission": null,
@@ -99,6 +104,13 @@ Create `~/.config/opencode/opencode-notifier.json` with the defaults:
     "subagent_complete": null,
     "error": null,
     "question": null
+  },
+  "volumes": {
+    "permission": 1,
+    "complete": 1,
+    "subagent_complete": 1,
+    "error": 1,
+    "question": 1
   }
 }
 ```
@@ -113,6 +125,7 @@ Create `~/.config/opencode/opencode-notifier.json` with the defaults:
   "notification": true,
   "timeout": 5,
   "showProjectName": true,
+  "showSessionTitle": false,
   "showIcon": true,
   "notificationSystem": "osascript"
 }
@@ -122,6 +135,7 @@ Create `~/.config/opencode/opencode-notifier.json` with the defaults:
 - `notification` - Turn notifications on/off (default: true)
 - `timeout` - How long notifications show in seconds, Linux only (default: 5)
 - `showProjectName` - Show folder name in notification title (default: true)
+- `showSessionTitle` - Include the session title in notification messages via `{sessionTitle}` placeholder (default: true)
 - `showIcon` - Show OpenCode icon, Windows/Linux only (default: true)
 - `notificationSystem` - macOS only: `"osascript"` or `"node-notifier"` (default: "osascript")
 
@@ -158,14 +172,23 @@ Customize the notification text:
 ```json
 {
   "messages": {
-    "permission": "Session needs permission",
-    "complete": "Session has finished",
-    "subagent_complete": "Subagent task completed",
-    "error": "Session encountered an error",
-    "question": "Session has a question"
+    "permission": "Session needs permission: {sessionTitle}",
+    "complete": "Session has finished: {sessionTitle}",
+    "subagent_complete": "Subagent task completed: {sessionTitle}",
+    "error": "Session encountered an error: {sessionTitle}",
+    "question": "Session has a question: {sessionTitle}"
   }
 }
 ```
+
+Messages support placeholder tokens that get replaced with actual values:
+
+- `{sessionTitle}` - The title/summary of the current session (e.g. "Fix login bug")
+- `{projectName}` - The project folder name
+
+When `showSessionTitle` is `false`, `{sessionTitle}` is replaced with an empty string. Any trailing separators (`: `, ` - `, ` | `) are automatically cleaned up when a placeholder resolves to empty.
+
+To disable session titles in messages without changing `showSessionTitle`, just remove the `{sessionTitle}` placeholder from your custom messages.
 
 ### Sounds
 
@@ -188,9 +211,29 @@ Platform notes:
 - Windows: Only .wav files work
 - If file doesn't exist, falls back to bundled sound
 
+### Volumes
+
+Set per-event volume from `0` to `1`:
+
+```json
+{
+  "volumes": {
+    "permission": 0.6,
+    "complete": 0.3,
+    "subagent_complete": 0.15,
+    "error": 1,
+    "question": 0.7
+  }
+}
+```
+
+- `0` = mute, `1` = full volume
+- Values outside `0..1` are clamped automatically
+- On Windows, playback still works but custom volume may not be honored by the default player
+
 ### Custom commands
 
-Run your own script when something happens. Use `{event}` and `{message}` as placeholders:
+Run your own script when something happens. Use `{event}`, `{message}`, and `{sessionTitle}` as placeholders:
 
 ```json
 {
@@ -205,7 +248,7 @@ Run your own script when something happens. Use `{event}` and `{message}` as pla
 
 - `enabled` - Turn command on/off
 - `path` - Path to your script/executable
-- `args` - Arguments to pass, can use `{event}` and `{message}` tokens
+- `args` - Arguments to pass, can use `{event}`, `{message}`, and `{sessionTitle}` tokens
 - `minDuration` - Skip if response was quick, avoids spam (seconds)
 
 #### Example: Log events to a file

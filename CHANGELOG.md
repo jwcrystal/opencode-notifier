@@ -2,12 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.20] - Unreleased
+## [0.1.22] - 2026-02-18
+
+### Added
+- New `interrupted` event for when sessions are cancelled (e.g., Esc pressed) (#29) - @minpeter
+- Shows "Session was interrupted" instead of duplicate error+completion notifications
+- Only one sound plays when interruption is detected
+- Auto-cleanup of error tracking to prevent memory leaks
+ - Fix placeholder interpolation so `{sessionTitle}` is removed when disabled
+
+### Changed
+- Restored PR #29's 350ms delay and 4-map tracking for reliable race handling
+- Added cleanup for session maps to avoid leaks
+
+## [0.1.21] - 2026-02-18
+
+### Added
+- Session title in notification messages (#28) - @cristianmiranda
+- New `showSessionTitle` config option (default: false)
+- New `{sessionTitle}` placeholder for notification messages
+- New `{projectName}` token support in custom command args
+- Session title pre-loading for better performance on error events
+
+### Notes
+- Session titles are disabled by default to avoid large notification text
+
+## [0.1.20] - 2026-02-18
+
+### Added
+- Per-event sound volume configuration (#30) - @minpeter
+- New `volumes` config option to set individual volume levels (0-1) for each event type
+- Supported on macOS and Linux (Windows plays at full volume)
+- Volume values are automatically clamped to valid range (0-1)
+- Default volume is 100% (1.0) for all events when not specified
+
+## [0.1.23] - 2026-02-19
 
 ### Added
 - `sound-toggle` custom tool - Enable, disable, toggle, or check sound status directly from OpenCode
 - Use natural language: "Use sound-toggle to disable sounds" or "Use sound-toggle to check status"
 - Config file path can be overridden via `OPENCODE_NOTIFIER_CONFIG_PATH` environment variable for testing
+
+### Fixed
+- Preserve all config fields when saving (no loss of sounds/volumes/showSessionTitle)
+- Sound toggle now takes effect immediately (config reloaded per event/tool)
 
 ## [0.1.19] - 2026-02-12
 

@@ -3,7 +3,7 @@ import { join, dirname } from "path"
 import { homedir } from "os"
 import { fileURLToPath } from "url"
 
-export type EventType = "permission" | "complete" | "subagent_complete" | "error" | "question"
+export type EventType = "permission" | "complete" | "subagent_complete" | "error" | "question" | "interrupted"
 
 export interface EventConfig {
   sound: boolean
@@ -17,11 +17,17 @@ export interface CommandConfig {
   minDuration?: number
 }
 
+export interface MessageContext {
+  sessionTitle?: string | null
+  projectName?: string | null
+}
+
 export interface NotifierConfig {
   sound: boolean
   notification: boolean
   timeout: number
   showProjectName: boolean
+  showSessionTitle: boolean
   showIcon: boolean
   notificationSystem: "osascript" | "node-notifier"
   command: CommandConfig
@@ -31,6 +37,7 @@ export interface NotifierConfig {
     subagent_complete: EventConfig
     error: EventConfig
     question: EventConfig
+    interrupted: EventConfig
   }
   messages: {
     permission: string
@@ -38,6 +45,7 @@ export interface NotifierConfig {
     subagent_complete: string
     error: string
     question: string
+    interrupted: string
   }
   sounds: {
     permission: string | null
@@ -45,6 +53,15 @@ export interface NotifierConfig {
     subagent_complete: string | null
     error: string | null
     question: string | null
+    interrupted: string | null
+  }
+  volumes: {
+    permission: number
+    complete: number
+    subagent_complete: number
+    error: number
+    question: number
+    interrupted: number
   }
 }
 
@@ -58,6 +75,7 @@ const DEFAULT_CONFIG: NotifierConfig = {
   notification: true,
   timeout: 5,
   showProjectName: true,
+  showSessionTitle: false,
   showIcon: true,
   notificationSystem: "osascript",
   command: {
@@ -71,13 +89,15 @@ const DEFAULT_CONFIG: NotifierConfig = {
     subagent_complete: { sound: false, notification: false },
     error: { ...DEFAULT_EVENT_CONFIG },
     question: { ...DEFAULT_EVENT_CONFIG },
+    interrupted: { ...DEFAULT_EVENT_CONFIG },
   },
   messages: {
-    permission: "Session needs permission",
-    complete: "Session has finished",
-    subagent_complete: "Subagent task completed",
-    error: "Session encountered an error",
-    question: "Session has a question",
+    permission: "Session needs permission: {sessionTitle}",
+    complete: "Session has finished: {sessionTitle}",
+    subagent_complete: "Subagent task completed: {sessionTitle}",
+    error: "Session encountered an error: {sessionTitle}",
+    question: "Session has a question: {sessionTitle}",
+    interrupted: "Session was interrupted: {sessionTitle}",
   },
   sounds: {
     permission: null,
@@ -85,6 +105,15 @@ const DEFAULT_CONFIG: NotifierConfig = {
     subagent_complete: null,
     error: null,
     question: null,
+    interrupted: null,
+  },
+  volumes: {
+    permission: 1,
+    complete: 1,
+    subagent_complete: 1,
+    error: 1,
+    question: 1,
+    interrupted: 1,
   },
 }
 
@@ -114,6 +143,22 @@ function parseEventConfig(
     sound: userEvent.sound ?? defaultConfig.sound,
     notification: userEvent.notification ?? defaultConfig.notification,
   }
+}
+
+function parseVolume(value: unknown, defaultVolume: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultVolume
+  }
+
+  if (value < 0) {
+    return 0
+  }
+
+  if (value > 1) {
+    return 1
+  }
+
+  return value
 }
 
 export function loadConfig(): NotifierConfig {
@@ -155,6 +200,7 @@ export function loadConfig(): NotifierConfig {
           ? userConfig.timeout
           : DEFAULT_CONFIG.timeout,
       showProjectName: userConfig.showProjectName ?? DEFAULT_CONFIG.showProjectName,
+      showSessionTitle: userConfig.showSessionTitle ?? DEFAULT_CONFIG.showSessionTitle,
       showIcon: userConfig.showIcon ?? DEFAULT_CONFIG.showIcon,
       notificationSystem: userConfig.notificationSystem === "node-notifier" ? "node-notifier" : "osascript",
       command: {
@@ -169,6 +215,7 @@ export function loadConfig(): NotifierConfig {
         subagent_complete: parseEventConfig(userConfig.events?.subagent_complete ?? userConfig.subagent_complete, { sound: false, notification: false }),
         error: parseEventConfig(userConfig.events?.error ?? userConfig.error, defaultWithGlobal),
         question: parseEventConfig(userConfig.events?.question ?? userConfig.question, defaultWithGlobal),
+        interrupted: parseEventConfig(userConfig.events?.interrupted ?? userConfig.interrupted, defaultWithGlobal),
       },
       messages: {
         permission: userConfig.messages?.permission ?? DEFAULT_CONFIG.messages.permission,
@@ -176,6 +223,7 @@ export function loadConfig(): NotifierConfig {
         subagent_complete: userConfig.messages?.subagent_complete ?? DEFAULT_CONFIG.messages.subagent_complete,
         error: userConfig.messages?.error ?? DEFAULT_CONFIG.messages.error,
         question: userConfig.messages?.question ?? DEFAULT_CONFIG.messages.question,
+        interrupted: userConfig.messages?.interrupted ?? DEFAULT_CONFIG.messages.interrupted,
       },
       sounds: {
         permission: userConfig.sounds?.permission ?? DEFAULT_CONFIG.sounds.permission,
@@ -183,6 +231,18 @@ export function loadConfig(): NotifierConfig {
         subagent_complete: userConfig.sounds?.subagent_complete ?? DEFAULT_CONFIG.sounds.subagent_complete,
         error: userConfig.sounds?.error ?? DEFAULT_CONFIG.sounds.error,
         question: userConfig.sounds?.question ?? DEFAULT_CONFIG.sounds.question,
+        interrupted: userConfig.sounds?.interrupted ?? DEFAULT_CONFIG.sounds.interrupted,
+      },
+      volumes: {
+        permission: parseVolume(userConfig.volumes?.permission, DEFAULT_CONFIG.volumes.permission),
+        complete: parseVolume(userConfig.volumes?.complete, DEFAULT_CONFIG.volumes.complete),
+        subagent_complete: parseVolume(
+          userConfig.volumes?.subagent_complete,
+          DEFAULT_CONFIG.volumes.subagent_complete
+        ),
+        error: parseVolume(userConfig.volumes?.error, DEFAULT_CONFIG.volumes.error),
+        question: parseVolume(userConfig.volumes?.question, DEFAULT_CONFIG.volumes.question),
+        interrupted: parseVolume(userConfig.volumes?.interrupted, DEFAULT_CONFIG.volumes.interrupted),
       },
     }
   } catch {
@@ -204,6 +264,10 @@ export function getMessage(config: NotifierConfig, event: EventType): string {
 
 export function getSoundPath(config: NotifierConfig, event: EventType): string | null {
   return config.sounds[event]
+}
+
+export function getSoundVolume(config: NotifierConfig, event: EventType): number {
+  return config.volumes[event]
 }
 
 export function getIconPath(config: NotifierConfig): string | undefined {
@@ -228,68 +292,57 @@ export function getIconPath(config: NotifierConfig): string | undefined {
 
 export function saveConfig(config: NotifierConfig): void {
   const configPath = getConfigPath()
-  
+
+  let existingConfig: Record<string, unknown> = {}
+  if (existsSync(configPath)) {
+    try {
+      const raw = readFileSync(configPath, "utf-8")
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        existingConfig = parsed as Record<string, unknown>
+      }
+    } catch {
+    }
+  }
+
   const userConfig: Record<string, unknown> = {
     sound: config.sound,
     notification: config.notification,
     timeout: config.timeout,
     showProjectName: config.showProjectName,
+    showSessionTitle: config.showSessionTitle,
     showIcon: config.showIcon,
     notificationSystem: config.notificationSystem,
-  }
-
-  const defaultWithGlobal: EventConfig = {
-    sound: config.sound,
-    notification: config.notification,
-  }
-
-  userConfig.events = {
-    permission: config.events.permission.sound !== defaultWithGlobal.sound || config.events.permission.notification !== defaultWithGlobal.notification 
-      ? config.events.permission 
-      : undefined,
-    complete: config.events.complete.sound !== defaultWithGlobal.sound || config.events.complete.notification !== defaultWithGlobal.notification 
-      ? config.events.complete 
-      : undefined,
-    subagent_complete: config.events.subagent_complete.sound !== false || config.events.subagent_complete.notification !== false 
-      ? config.events.subagent_complete 
-      : undefined,
-    error: config.events.error.sound !== defaultWithGlobal.sound || config.events.error.notification !== defaultWithGlobal.notification 
-      ? config.events.error 
-      : undefined,
-    question: config.events.question.sound !== defaultWithGlobal.sound || config.events.question.notification !== defaultWithGlobal.notification 
-      ? config.events.question 
-      : undefined,
-  }
-
-  if (config.command.enabled || config.command.path) {
-    userConfig.command = {
+    command: {
       enabled: config.command.enabled,
       path: config.command.path,
       args: config.command.args,
       minDuration: config.command.minDuration,
-    }
+    },
+    events: config.events,
+    messages: config.messages,
+    sounds: config.sounds,
+    volumes: config.volumes,
   }
 
-  userConfig.messages = config.messages
+  const mergedConfig = { ...existingConfig, ...userConfig }
+  writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2) + "\n", "utf-8")
+}
 
-  const cleanedConfig: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(userConfig)) {
-    if (value !== undefined) {
-      cleanedConfig[key] = value
-    }
-  }
+export function interpolateMessage(message: string, context: MessageContext): string {
+  let result = message
 
-  const nestedEvents = cleanedConfig.events as Record<string, unknown> | undefined
-  if (nestedEvents) {
-    for (const [key, value] of Object.entries(nestedEvents)) {
-      if (value === undefined) {
-        delete nestedEvents[key]
-      }
-    }
-    if (Object.keys(nestedEvents).length === 0) {
-      delete cleanedConfig.events
-    }
-  }
+  const sessionTitle = context.sessionTitle || ""
+  result = result.replaceAll("{sessionTitle}", sessionTitle)
 
-  writeFileSync(configPath, JSON.stringify(cleanedConfig, null, 2) + "\n", "utf-8")
+  const projectName = context.projectName || ""
+  result = result.replaceAll("{projectName}", projectName)
+
+  // Clean up artifacts from empty placeholder replacements
+  // Remove trailing separators like ": ", " - ", " | " left after empty substitution
+  result = result.replace(/\s*[:\-|]\s*$/, "").trim()
+  // Collapse multiple spaces into one
+  result = result.replace(/\s{2,}/g, " ")
+
+  return result
 }

@@ -50,6 +50,22 @@ describe("Sound Toggle", () => {
     
     const config = JSON.parse(readFileSync(testConfigPath, "utf-8"))
     expect(config.sound).toBe(false)
+    expect(config.notification).toBe(true)
+  })
+
+  test("toggleSound preserves extra config fields", async () => {
+    mkdirSync(testConfigDir, { recursive: true })
+    writeFileSync(
+      testConfigPath,
+      JSON.stringify({ sound: true, notification: true, volumes: { error: 0.2 }, customField: "keep" })
+    )
+
+    const { toggleSound } = await import("./sound-toggle")
+    toggleSound()
+
+    const config = JSON.parse(readFileSync(testConfigPath, "utf-8"))
+    expect(config.volumes.error).toBe(0.2)
+    expect(config.customField).toBe("keep")
   })
 
   test("toggleSound switches sound from false to true", async () => {

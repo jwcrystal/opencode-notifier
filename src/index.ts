@@ -1,12 +1,55 @@
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import { basename } from "path"
-import { loadConfig, isEventSoundEnabled, isEventNotificationEnabled, getMessage, getSoundPath, getIconPath } from "./config"
+import {
+  loadConfig,
+  isEventSoundEnabled,
+  isEventNotificationEnabled,
+  getMessage,
+  getSoundPath,
+  getSoundVolume,
+  getIconPath,
+  interpolateMessage,
+} from "./config"
 import type { EventType, NotifierConfig } from "./config"
 import { sendNotification } from "./notify"
 import { playSound } from "./sound"
 import { runCommand } from "./command"
 import { executeSoundToggle, type SoundToggleAction } from "./sound-toggle"
+
+const IDLE_COMPLETE_DELAY_MS = 350
+
+const pendingIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const sessionIdleSequence = new Map<string, number>()
+const sessionErrorSuppressionAt = new Map<string, number>()
+const sessionLastBusyAt = new Map<string, number>()
+
+// Memory cleanup: Remove old session entries every 5 minutes to prevent leaks
+setInterval(() => {
+  const cutoff = Date.now() - 5 * 60 * 1000 // 5 minutes ago
+
+  // Clean up sessionIdleSequence (use last access time stored separately if needed)
+  for (const [sessionID] of sessionIdleSequence) {
+    // If not in pendingIdleTimers, it's likely stale
+    if (!pendingIdleTimers.has(sessionID)) {
+      sessionIdleSequence.delete(sessionID)
+    }
+  }
+
+  // Clean up sessionErrorSuppressionAt
+  for (const [sessionID, timestamp] of sessionErrorSuppressionAt) {
+    if (timestamp < cutoff) {
+      sessionErrorSuppressionAt.delete(sessionID)
+    }
+  }
+
+  // Clean up sessionLastBusyAt
+  for (const [sessionID, timestamp] of sessionLastBusyAt) {
+    if (timestamp < cutoff) {
+      sessionLastBusyAt.delete(sessionID)
+    }
+  }
+}, 5 * 60 * 1000)
 
 function getNotificationTitle(config: NotifierConfig, projectName: string | null): string {
   if (config.showProjectName && projectName) {
@@ -19,11 +62,16 @@ async function handleEvent(
   config: NotifierConfig,
   eventType: EventType,
   projectName: string | null,
-  elapsedSeconds?: number | null
+  elapsedSeconds?: number | null,
+  sessionTitle?: string | null
 ): Promise<void> {
   const promises: Promise<void>[] = []
 
-  const message = getMessage(config, eventType)
+  const rawMessage = getMessage(config, eventType)
+  const message = interpolateMessage(rawMessage, {
+    sessionTitle: config.showSessionTitle ? sessionTitle : null,
+    projectName,
+  })
 
   if (isEventNotificationEnabled(config, eventType)) {
     const title = getNotificationTitle(config, projectName)
@@ -33,7 +81,8 @@ async function handleEvent(
 
   if (isEventSoundEnabled(config, eventType)) {
     const customSoundPath = getSoundPath(config, eventType)
-    promises.push(playSound(eventType, customSoundPath))
+    const soundVolume = getSoundVolume(config, eventType)
+    promises.push(playSound(eventType, customSoundPath, soundVolume))
   }
 
   const minDuration = config.command?.minDuration
@@ -46,7 +95,7 @@ async function handleEvent(
     elapsedSeconds < minDuration
 
   if (!shouldSkipCommand) {
-    runCommand(config, eventType, message)
+    runCommand(config, eventType, message, sessionTitle, projectName)
   }
 
   await Promise.allSettled(promises)
@@ -60,9 +109,64 @@ function getSessionIDFromEvent(event: unknown): string | null {
   return null
 }
 
+function clearPendingIdleTimer(sessionID: string): void {
+  const timer = pendingIdleTimers.get(sessionID)
+  if (!timer) {
+    return
+  }
+
+  clearTimeout(timer)
+  pendingIdleTimers.delete(sessionID)
+}
+
+function bumpSessionIdleSequence(sessionID: string): number {
+  const nextSequence = (sessionIdleSequence.get(sessionID) ?? 0) + 1
+  sessionIdleSequence.set(sessionID, nextSequence)
+  return nextSequence
+}
+
+function hasCurrentSessionIdleSequence(sessionID: string, sequence: number): boolean {
+  return sessionIdleSequence.get(sessionID) === sequence
+}
+
+function markSessionError(sessionID: string | null): void {
+  if (!sessionID) {
+    return
+  }
+
+  sessionErrorSuppressionAt.set(sessionID, Date.now())
+  bumpSessionIdleSequence(sessionID)
+  clearPendingIdleTimer(sessionID)
+}
+
+function markSessionBusy(sessionID: string): void {
+  const now = Date.now()
+  sessionLastBusyAt.set(sessionID, now)
+  sessionErrorSuppressionAt.delete(sessionID)
+  bumpSessionIdleSequence(sessionID)
+  clearPendingIdleTimer(sessionID)
+}
+
+function shouldSuppressSessionIdle(sessionID: string): boolean {
+  const errorAt = sessionErrorSuppressionAt.get(sessionID)
+  if (errorAt === undefined) {
+    return false
+  }
+
+  const busyAt = sessionLastBusyAt.get(sessionID)
+  if (typeof busyAt === "number" && busyAt > errorAt) {
+    sessionErrorSuppressionAt.delete(sessionID)
+    return false
+  }
+
+  sessionErrorSuppressionAt.delete(sessionID)
+  return true
+}
+
 async function getElapsedSinceLastPrompt(
   client: PluginInput["client"],
-  sessionID: string
+  sessionID: string,
+  nowMs: number = Date.now()
 ): Promise<number | null> {
   try {
     const response = await client.session.messages({ path: { id: sessionID } })
@@ -79,7 +183,7 @@ async function getElapsedSinceLastPrompt(
     }
 
     if (lastUserMessageTime !== null) {
-      return (Date.now() - lastUserMessageTime) / 1000
+      return (nowMs - lastUserMessageTime) / 1000
     }
   } catch {
   }
@@ -87,17 +191,74 @@ async function getElapsedSinceLastPrompt(
   return null
 }
 
-async function isChildSession(
+interface SessionInfo {
+  isChild: boolean
+  title: string | null
+}
+
+async function getSessionInfo(
   client: PluginInput["client"],
   sessionID: string
-): Promise<boolean> {
+): Promise<SessionInfo> {
   try {
     const response = await client.session.get({ path: { id: sessionID } })
-    const parentID = response.data?.parentID
-    return !!parentID
+    return {
+      isChild: !!response.data?.parentID,
+      title: response.data?.title ?? null,
+    }
   } catch {
-    return false
+    return { isChild: false, title: null }
   }
+}
+
+async function processSessionIdle(
+  client: PluginInput["client"],
+  config: NotifierConfig,
+  projectName: string | null,
+  event: unknown,
+  sessionID: string,
+  sequence: number,
+  idleReceivedAtMs: number
+): Promise<void> {
+  if (!hasCurrentSessionIdleSequence(sessionID, sequence)) {
+    return
+  }
+
+  if (shouldSuppressSessionIdle(sessionID)) {
+    return
+  }
+
+  const sessionInfo = await getSessionInfo(client, sessionID)
+
+  if (!hasCurrentSessionIdleSequence(sessionID, sequence)) {
+    return
+  }
+
+  if (!sessionInfo.isChild) {
+    await handleEventWithElapsedTime(client, config, "complete", projectName, event, idleReceivedAtMs, sessionInfo.title)
+    return
+  }
+
+  await handleEventWithElapsedTime(client, config, "subagent_complete", projectName, event, idleReceivedAtMs, sessionInfo.title)
+}
+
+function scheduleSessionIdle(
+  client: PluginInput["client"],
+  config: NotifierConfig,
+  projectName: string | null,
+  event: unknown,
+  sessionID: string
+): void {
+  clearPendingIdleTimer(sessionID)
+  const sequence = bumpSessionIdleSequence(sessionID)
+  const idleReceivedAtMs = Date.now()
+
+  const timer = setTimeout(() => {
+    pendingIdleTimers.delete(sessionID)
+    void processSessionIdle(client, config, projectName, event, sessionID, sequence, idleReceivedAtMs).catch(() => undefined)
+  }, IDLE_COMPLETE_DELAY_MS)
+
+  pendingIdleTimers.set(sessionID, timer)
 }
 
 async function handleEventWithElapsedTime(
@@ -105,8 +266,11 @@ async function handleEventWithElapsedTime(
   config: NotifierConfig,
   eventType: EventType,
   projectName: string | null,
-  event: unknown
+  event: unknown,
+  elapsedReferenceNowMs?: number,
+  preloadedSessionTitle?: string | null
 ): Promise<void> {
+  const sessionID = getSessionIDFromEvent(event)
   const minDuration = config.command?.minDuration
   const shouldLookupElapsed =
     !!config.command?.enabled &&
@@ -118,17 +282,22 @@ async function handleEventWithElapsedTime(
 
   let elapsedSeconds: number | null = null
   if (shouldLookupElapsed) {
-    const sessionID = getSessionIDFromEvent(event)
     if (sessionID) {
-      elapsedSeconds = await getElapsedSinceLastPrompt(client, sessionID)
+      elapsedSeconds = await getElapsedSinceLastPrompt(client, sessionID, elapsedReferenceNowMs)
     }
   }
 
-  await handleEvent(config, eventType, projectName, elapsedSeconds)
+  let sessionTitle: string | null = preloadedSessionTitle ?? null
+  if (sessionID && !sessionTitle && config.showSessionTitle) {
+    const info = await getSessionInfo(client, sessionID)
+    sessionTitle = info.title
+  }
+
+  await handleEvent(config, eventType, projectName, elapsedSeconds, sessionTitle)
 }
 
 export const NotifierPlugin: Plugin = async ({ client, directory }) => {
-  const config = loadConfig()
+  const getConfig = () => loadConfig()
   const projectName = directory ? basename(directory) : null
 
   return {
@@ -145,6 +314,7 @@ export const NotifierPlugin: Plugin = async ({ client, directory }) => {
       }),
     },
     event: async ({ event }) => {
+      const config = getConfig()
       if (event.type === "permission.updated") {
         await handleEventWithElapsedTime(client, config, "permission", projectName, event)
       }
@@ -156,25 +326,33 @@ export const NotifierPlugin: Plugin = async ({ client, directory }) => {
       if (event.type === "session.idle") {
         const sessionID = getSessionIDFromEvent(event)
         if (sessionID) {
-          const isChild = await isChildSession(client, sessionID)
-          if (!isChild) {
-            await handleEventWithElapsedTime(client, config, "complete", projectName, event)
-          } else {
-            await handleEventWithElapsedTime(client, config, "subagent_complete", projectName, event)
-          }
+          scheduleSessionIdle(client, config, projectName, event, sessionID)
         } else {
           await handleEventWithElapsedTime(client, config, "complete", projectName, event)
         }
       }
 
+      if (event.type === "session.status" && event.properties.status.type === "busy") {
+        markSessionBusy(event.properties.sessionID)
+      }
+
       if (event.type === "session.error") {
-        await handleEventWithElapsedTime(client, config, "error", projectName, event)
+        const sessionID = getSessionIDFromEvent(event)
+        markSessionError(sessionID)
+        let sessionTitle: string | null = null
+        if (sessionID && config.showSessionTitle) {
+          const info = await getSessionInfo(client, sessionID)
+          sessionTitle = info.title
+        }
+        await handleEventWithElapsedTime(client, config, "error", projectName, event, undefined, sessionTitle)
       }
     },
     "permission.ask": async () => {
+      const config = getConfig()
       await handleEvent(config, "permission", projectName, null)
     },
     "tool.execute.before": async (input) => {
+      const config = getConfig()
       if (input.tool === "question") {
         await handleEvent(config, "question", projectName, null)
       }
