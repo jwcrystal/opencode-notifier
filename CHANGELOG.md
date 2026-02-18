@@ -2,16 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.23] - 2026-02-19
+## [0.1.24] - 2026-02-19
 
-### Added
-- `sound-toggle` custom tool - Enable, disable, toggle, or check sound status directly from OpenCode
-- Use natural language: "Use sound-toggle to disable sounds" or "Use sound-toggle to check status"
-- Config file path can be overridden via `OPENCODE_NOTIFIER_CONFIG_PATH` environment variable for testing
-
-### Fixed
-- Preserve all config fields when saving (no loss of sounds/volumes/showSessionTitle)
-- Sound toggle now takes effect immediately (config reloaded per event/tool)
+### Removed
+- Reverted `sound-toggle` feature from v0.1.23 (#27)
+- Removed `sound-toggle` custom tool and related code
+- Kept all v0.1.20-0.1.22 features intact (volumes, session titles, interrupted events)
 
 ## [0.1.22] - 2026-02-18
 

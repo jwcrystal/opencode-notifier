@@ -290,45 +290,6 @@ export function getIconPath(config: NotifierConfig): string | undefined {
   return undefined
 }
 
-export function saveConfig(config: NotifierConfig): void {
-  const configPath = getConfigPath()
-
-  let existingConfig: Record<string, unknown> = {}
-  if (existsSync(configPath)) {
-    try {
-      const raw = readFileSync(configPath, "utf-8")
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        existingConfig = parsed as Record<string, unknown>
-      }
-    } catch {
-    }
-  }
-
-  const userConfig: Record<string, unknown> = {
-    sound: config.sound,
-    notification: config.notification,
-    timeout: config.timeout,
-    showProjectName: config.showProjectName,
-    showSessionTitle: config.showSessionTitle,
-    showIcon: config.showIcon,
-    notificationSystem: config.notificationSystem,
-    command: {
-      enabled: config.command.enabled,
-      path: config.command.path,
-      args: config.command.args,
-      minDuration: config.command.minDuration,
-    },
-    events: config.events,
-    messages: config.messages,
-    sounds: config.sounds,
-    volumes: config.volumes,
-  }
-
-  const mergedConfig = { ...existingConfig, ...userConfig }
-  writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2) + "\n", "utf-8")
-}
-
 export function interpolateMessage(message: string, context: MessageContext): string {
   let result = message
 
