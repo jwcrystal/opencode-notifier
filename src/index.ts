@@ -1,6 +1,15 @@
 import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { basename } from "path"
-import { loadConfig, isEventSoundEnabled, isEventNotificationEnabled, getMessage, getSoundPath, getIconPath } from "./config"
+import {
+  loadConfig,
+  isEventSoundEnabled,
+  isEventNotificationEnabled,
+  getMessage,
+  getSoundPath,
+  getSoundVolume,
+  getIconPath,
+  interpolateMessage,
+} from "./config"
 import type { EventType, NotifierConfig } from "./config"
 import { sendNotification } from "./notify"
 import { playSound } from "./sound"
@@ -51,11 +60,16 @@ async function handleEvent(
   config: NotifierConfig,
   eventType: EventType,
   projectName: string | null,
-  elapsedSeconds?: number | null
+  elapsedSeconds?: number | null,
+  sessionTitle?: string | null
 ): Promise<void> {
   const promises: Promise<void>[] = []
 
-  const message = getMessage(config, eventType)
+  const rawMessage = getMessage(config, eventType)
+  const message = interpolateMessage(rawMessage, {
+    sessionTitle: config.showSessionTitle ? sessionTitle : null,
+    projectName,
+  })
 
   if (isEventNotificationEnabled(config, eventType)) {
     const title = getNotificationTitle(config, projectName)
@@ -65,7 +79,8 @@ async function handleEvent(
 
   if (isEventSoundEnabled(config, eventType)) {
     const customSoundPath = getSoundPath(config, eventType)
-    promises.push(playSound(eventType, customSoundPath, 1.0))
+    const soundVolume = getSoundVolume(config, eventType)
+    promises.push(playSound(eventType, customSoundPath, soundVolume))
   }
 
   const minDuration = config.command?.minDuration
@@ -78,7 +93,7 @@ async function handleEvent(
     elapsedSeconds < minDuration
 
   if (!shouldSkipCommand) {
-    runCommand(config, eventType, message)
+    runCommand(config, eventType, message, sessionTitle, projectName)
   }
 
   await Promise.allSettled(promises)
@@ -174,16 +189,23 @@ async function getElapsedSinceLastPrompt(
   return null
 }
 
-async function isChildSession(
+interface SessionInfo {
+  isChild: boolean
+  title: string | null
+}
+
+async function getSessionInfo(
   client: PluginInput["client"],
   sessionID: string
-): Promise<boolean> {
+): Promise<SessionInfo> {
   try {
     const response = await client.session.get({ path: { id: sessionID } })
-    const parentID = response.data?.parentID
-    return !!parentID
+    return {
+      isChild: !!response.data?.parentID,
+      title: response.data?.title ?? null,
+    }
   } catch {
-    return false
+    return { isChild: false, title: null }
   }
 }
 
@@ -204,18 +226,18 @@ async function processSessionIdle(
     return
   }
 
-  const isChild = await isChildSession(client, sessionID)
+  const sessionInfo = await getSessionInfo(client, sessionID)
 
   if (!hasCurrentSessionIdleSequence(sessionID, sequence)) {
     return
   }
 
-  if (!isChild) {
-    await handleEventWithElapsedTime(client, config, "complete", projectName, event, idleReceivedAtMs)
+  if (!sessionInfo.isChild) {
+    await handleEventWithElapsedTime(client, config, "complete", projectName, event, idleReceivedAtMs, sessionInfo.title)
     return
   }
 
-  await handleEventWithElapsedTime(client, config, "subagent_complete", projectName, event, idleReceivedAtMs)
+  await handleEventWithElapsedTime(client, config, "subagent_complete", projectName, event, idleReceivedAtMs, sessionInfo.title)
 }
 
 function scheduleSessionIdle(
@@ -243,8 +265,10 @@ async function handleEventWithElapsedTime(
   eventType: EventType,
   projectName: string | null,
   event: unknown,
-  elapsedReferenceNowMs?: number
+  elapsedReferenceNowMs?: number,
+  preloadedSessionTitle?: string | null
 ): Promise<void> {
+  const sessionID = getSessionIDFromEvent(event)
   const minDuration = config.command?.minDuration
   const shouldLookupElapsed =
     !!config.command?.enabled &&
@@ -256,13 +280,18 @@ async function handleEventWithElapsedTime(
 
   let elapsedSeconds: number | null = null
   if (shouldLookupElapsed) {
-    const sessionID = getSessionIDFromEvent(event)
     if (sessionID) {
       elapsedSeconds = await getElapsedSinceLastPrompt(client, sessionID, elapsedReferenceNowMs)
     }
   }
 
-  await handleEvent(config, eventType, projectName, elapsedSeconds)
+  let sessionTitle: string | null = preloadedSessionTitle ?? null
+  if (sessionID && !sessionTitle && config.showSessionTitle) {
+    const info = await getSessionInfo(client, sessionID)
+    sessionTitle = info.title
+  }
+
+  await handleEvent(config, eventType, projectName, elapsedSeconds, sessionTitle)
 }
 
 export const NotifierPlugin: Plugin = async ({ client, directory }) => {
@@ -293,8 +322,14 @@ export const NotifierPlugin: Plugin = async ({ client, directory }) => {
       }
 
       if (event.type === "session.error") {
-        markSessionError(getSessionIDFromEvent(event))
-        await handleEventWithElapsedTime(client, config, "error", projectName, event)
+        const sessionID = getSessionIDFromEvent(event)
+        markSessionError(sessionID)
+        let sessionTitle: string | null = null
+        if (sessionID && config.showSessionTitle) {
+          const info = await getSessionInfo(client, sessionID)
+          sessionTitle = info.title
+        }
+        await handleEventWithElapsedTime(client, config, "error", projectName, event, undefined, sessionTitle)
       }
     },
     "permission.ask": async () => {
