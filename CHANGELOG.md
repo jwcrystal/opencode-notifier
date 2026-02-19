@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.26] - 2026-02-19
+
+### Fixed
+- Suppress completion sounds immediately after error events (#31)
+
 ## [0.1.24] - 2026-02-19
 
 ### Removed

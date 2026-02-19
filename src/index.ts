@@ -146,7 +146,7 @@ function markSessionBusy(sessionID: string): void {
   clearPendingIdleTimer(sessionID)
 }
 
-function shouldSuppressSessionIdle(sessionID: string): boolean {
+function shouldSuppressSessionIdle(sessionID: string, consume: boolean = true): boolean {
   const errorAt = sessionErrorSuppressionAt.get(sessionID)
   if (errorAt === undefined) {
     return false
@@ -158,7 +158,9 @@ function shouldSuppressSessionIdle(sessionID: string): boolean {
     return false
   }
 
-  sessionErrorSuppressionAt.delete(sessionID)
+  if (consume) {
+    sessionErrorSuppressionAt.delete(sessionID)
+  }
   return true
 }
 
@@ -230,6 +232,10 @@ async function processSessionIdle(
   const sessionInfo = await getSessionInfo(client, sessionID)
 
   if (!hasCurrentSessionIdleSequence(sessionID, sequence)) {
+    return
+  }
+
+  if (shouldSuppressSessionIdle(sessionID)) {
     return
   }
 
